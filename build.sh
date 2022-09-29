@@ -1,7 +1,7 @@
 #!/bin/bash
 
 IMAGE=${IMAGE:-docker4gis/proxy}
-DOCKER_BASE=$DOCKER_BASE
+DOCKER_BASE=$(npx --yes docker4gis@"${DOCKER4GIS_VERSION:-latest}" base)
 DOCKER_USER=$DOCKER_USER
 
 mkdir -p conf
