@@ -1,0 +1,12 @@
+trigger:
+- none
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- script: docker login -u=docker4gis -p='$(DOCKER_PASSWORD)' docker.io
+  displayName: 'docker login'
+
+- script: npx --yes docker4gis@latest build
+  displayName: 'docker4gis build'
