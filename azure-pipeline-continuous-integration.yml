@@ -1,0 +1,29 @@
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- checkout: self
+  persistCredentials: 'true'
+  clean: 'true'
+
+- script: docker login -u=docker4gis -p='$(DOCKER_PASSWORD)' docker.io
+  displayName: 'docker login'
+
+- script: npx --yes docker4gis@latest build
+  displayName: 'docker4gis build'
+
+- script: |
+    git config --global user.email 'pipeline@azure.com'
+    git config --global user.name 'Azure Pipeline'
+  displayName: 'git config'
+
+- script: |
+    git checkout -b main
+    git push --set-upstream origin main
+  displayName: 'git undo detached state'
+  
+- script: npx --yes docker4gis@latest push
+  displayName: 'docker4gis push'
