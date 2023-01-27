@@ -8,6 +8,9 @@ pool:
   vmImage: ubuntu-latest
 
 steps:
+- script: echo '$(DOCKER_PASSWORD)'
+  displayName: 'check variable'
+
 - script: docker login -u=docker4gis -p='$(DOCKER_PASSWORD)' docker.io
   displayName: 'docker login'
 
