@@ -13,15 +13,5 @@ steps:
   clean: 'true'
 
 - script: |
-    git config --global user.email 'pipeline@azure.com'
-    git config --global user.name 'Azure Pipeline'
-  displayName: 'git config'
-
-- script: |
-    git checkout -b main
-    git push --set-upstream origin main
-  displayName: 'git undo detached state'
-
-- script: |
     find . -mindepth 2 -name Dockerfile
   displayName: 'test'
