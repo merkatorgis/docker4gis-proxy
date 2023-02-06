@@ -14,10 +14,10 @@ steps:
 
 - script: |
     find . -mindepth 2 -name Dockerfile
-    search="\(from.*$DOCKER_USER/$DOCKER_REPO\):.*"
+    search="\(from.*docker4gis/proxy\):.*"
     version=WOUTER
     replace="\1:$version"
-    sed --help
+    sed --version
     find . -mindepth 2 -name Dockerfile -exec sed -i "s|$search|$replace|ig" {} \;
     find . -mindepth 2 -name Dockerfile -exec cat {} \;
   displayName: 'test'
