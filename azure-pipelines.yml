@@ -23,5 +23,10 @@ steps:
   displayName: 'git undo detached state'
 
 - script: |
-    docker container ls
+    cd base
+    pwd
   displayName: 'test'
+
+- script: |
+    pwd
+  displayName: 'test2'
