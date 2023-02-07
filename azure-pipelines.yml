@@ -24,9 +24,11 @@ steps:
 
 - script: |
     cd template
-    pwd
+    ls -l
+    echo $(pwd)
   displayName: 'test'
 
 - script: |
-    pwd
+    ls -l
+    echo $(pwd)
   displayName: 'test2'
