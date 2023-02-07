@@ -23,7 +23,7 @@ steps:
   displayName: 'git undo detached state'
 
 - script: |
-    cd base
+    cd template
     pwd
   displayName: 'test'
 
