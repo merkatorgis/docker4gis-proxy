@@ -23,12 +23,5 @@ steps:
   displayName: 'git undo detached state'
 
 - script: |
-    find . -mindepth 2 -name Dockerfile
-    search="\(from.*docker4gis/proxy\):.*"
-    version=WOUTER
-    replace="\1:$version"
-    find . -mindepth 2 -name Dockerfile -exec sed -i "s|$search|$replace|ig" {} \;
-    find . -mindepth 2 -name Dockerfile -exec cat {} \;
-    git add .
-    git status
+    docker container ls
   displayName: 'test'
