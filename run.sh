@@ -24,6 +24,8 @@ DOCKER_BINDS_DIR=$DOCKER_BINDS_DIR
 
 mkdir -p "$DOCKER_BINDS_DIR"/certificates
 
+NETWORK=$CONTAINER
+
 getip() {
 	if result=$(getent ahostsv4 "$1" 2>/dev/null); then
 		echo "$result" | awk '{ print $1 ; exit }'
