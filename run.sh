@@ -63,7 +63,7 @@ docker container run --restart "$RESTART" --name "$CONTAINER" \
 	-e DOCKER_ENV="$DOCKER_ENV" \
 	--mount source="$VOLUME",target=/config \
 	--network "$NETWORK" \
-	-d "$IMAGE" component_name "$@"
+	-d "$IMAGE" proxy "$@"
 
 # Loop over the config files in the proxy volume, and connect the proxy
 # container to any docker network of that name, so that the one proxy container
