@@ -5,14 +5,6 @@ PROXY_HOST=${PROXY_HOST:-localhost}
 PROXY_PORT=${PROXY_PORT:-443}
 PROXY_PORT_HTTP=${PROXY_PORT_HTTP:-80}
 AUTOCERT=${AUTOCERT:-false}
-
-IMAGE=$IMAGE
-CONTAINER=$CONTAINER
-RESTART=$RESTART
-
-DOCKER_USER=$DOCKER_USER
-DOCKER_ENV=$DOCKER_ENV
-DOCKER_BINDS_DIR=$DOCKER_BINDS_DIR
 DEBUG=${DEBUG:-false}
 
 SECRET=$SECRET
@@ -20,6 +12,15 @@ API=$API
 AUTH_PATH=$AUTH_PATH
 APP=$APP
 HOMEDEST=$HOMEDEST
+
+IMAGE=$IMAGE
+CONTAINER=$CONTAINER
+DOCKER_ENV=$DOCKER_ENV
+RESTART=$RESTART
+NETWORK=$NETWORK
+FILEPORT=$FILEPORT
+VOLUME=$VOLUME
+DOCKER_BINDS_DIR=$DOCKER_BINDS_DIR
 
 mkdir -p "$DOCKER_BINDS_DIR"/certificates
 
@@ -41,12 +42,6 @@ urlhost() {
 	echo "$1" | sed 's~.*//\([^:/]*\).*~\1~'
 }
 
-network=$CONTAINER
-docker4gis/network.sh "$network"
-
-volume=$CONTAINER
-docker volume create "$volume" >/dev/null
-
 PROXY_PORT=$(docker4gis/port.sh "$PROXY_PORT")
 PROXY_PORT_HTTP=$(docker4gis/port.sh "$PROXY_PORT_HTTP")
 
@@ -62,13 +57,17 @@ docker container run --restart "$RESTART" --name "$CONTAINER" \
 	-e "$(docker4gis/noop.sh APP "$APP")" \
 	-e "$(docker4gis/noop.sh HOMEDEST "$HOMEDEST")" \
 	-v "$(docker4gis/bind.sh "$DOCKER_BINDS_DIR"/certificates /certificates)" \
-	--mount source="$volume",target=/config \
 	-p "$PROXY_PORT":443 \
 	-p "$PROXY_PORT_HTTP":80 \
-	--network "$network" \
 	--add-host="$(hostname)":"$(getip "$(hostname)")" \
-	-d "$IMAGE" proxy "$@"
+	-e DOCKER_ENV="$DOCKER_ENV" \
+	--mount source="$VOLUME",target=/config \
+	--network "$NETWORK" \
+	-d "$IMAGE" component_name "$@"
 
+# Loop over the config files in the proxy volume, and connect the proxy
+# container to any docker network of that name, so that the one proxy container
+# can reach different applications' components' containers.
 for network in $(docker container exec "$CONTAINER" ls /config); do
 	if docker network inspect "$network" 1>/dev/null 2>&1; then
 		docker network connect "$network" "$CONTAINER"
