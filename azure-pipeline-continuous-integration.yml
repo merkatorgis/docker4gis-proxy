@@ -12,11 +12,9 @@ steps:
   persistCredentials: 'true'
   clean: 'true'
 
-- script: echo '$(DOCKER_PASSWORD)' | docker login -u=docker4gis --password-stdin docker.io
+- script: |
+    echo '$(DOCKER_PASSWORD)' | docker login -u=docker4gis --password-stdin docker.io
   displayName: 'docker login'
-  
-- script: npx --yes docker4gis@latest build
-  displayName: 'docker4gis build'
 
 - script: |
     git config --global user.email 'pipeline@azure.com'
@@ -28,5 +26,6 @@ steps:
     git push --set-upstream origin main
   displayName: 'git undo detached state'
   
-- script: npx --yes docker4gis@latest push
+- script: |
+    npx --yes docker4gis@latest push
   displayName: 'docker4gis push'
