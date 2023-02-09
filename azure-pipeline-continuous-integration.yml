@@ -8,14 +8,14 @@ pool:
   vmImage: ubuntu-latest
 
 steps:
-- checkout: self
-  persistCredentials: 'true'
-  clean: 'true'
+- script: |
+    git remote set-url origin https://merkatorgis:$(GITHUB_PASSWORD)@github.com/merkatorgis/docker4gis-proxy.git
+  displayName: 'git login'
 
 - script: |
     echo '$(DOCKER_PASSWORD)' | docker login -u=docker4gis --password-stdin docker.io
   displayName: 'docker login'
-
+#
 - script: |
     git config --global user.email 'pipeline@azure.com'
     git config --global user.name 'Azure Pipeline'
