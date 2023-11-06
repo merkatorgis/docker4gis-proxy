@@ -18,6 +18,7 @@ CONTAINER=$CONTAINER
 DOCKER_ENV=$DOCKER_ENV
 RESTART=$RESTART
 NETWORK=$NETWORK
+IP=$IP
 FILEPORT=$FILEPORT
 VOLUME=$VOLUME
 DOCKER_BINDS_DIR=$DOCKER_BINDS_DIR
@@ -56,20 +57,21 @@ docker container run --restart "$RESTART" --name "$CONTAINER" \
 	-e "$(docker4gis/noop.sh AUTH_PATH "$AUTH_PATH")" \
 	-e "$(docker4gis/noop.sh APP "$APP")" \
 	-e "$(docker4gis/noop.sh HOMEDEST "$HOMEDEST")" \
-	-v "$(docker4gis/bind.sh "$DOCKER_BINDS_DIR"/certificates /certificates)" \
+	--mount type=bind,source="$DOCKER_BINDS_DIR"/certificates,target=/certificates \
 	-p "$PROXY_PORT":443 \
 	-p "$PROXY_PORT_HTTP":80 \
 	--add-host="$(hostname)":"$(getip "$(hostname)")" \
 	-e DOCKER_ENV="$DOCKER_ENV" \
 	--mount source="$VOLUME",target=/config \
 	--network "$NETWORK" \
+	--ip "$IP" \
 	-d "$IMAGE" proxy "$@"
 
 # Loop over the config files in the proxy volume, and connect the proxy
 # container to any docker network of that name, so that the one proxy container
 # can reach different applications' components' containers.
 for network in $(docker container exec "$CONTAINER" ls /config); do
-	if docker network inspect "$network" 1>/dev/null 2>&1; then
+	if docker network inspect "$network" >/dev/null 2>&1; then
 		docker network connect "$network" "$CONTAINER"
 	fi
 done
