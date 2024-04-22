@@ -18,7 +18,6 @@ CONTAINER=$CONTAINER
 DOCKER_ENV=$DOCKER_ENV
 RESTART=$RESTART
 NETWORK=$NETWORK
-IP=$IP
 FILEPORT=$FILEPORT
 VOLUME=$VOLUME
 DOCKER_BINDS_DIR=$DOCKER_BINDS_DIR
@@ -64,7 +63,6 @@ docker container run --restart "$RESTART" --name "$CONTAINER" \
 	-e DOCKER_ENV="$DOCKER_ENV" \
 	--mount source="$VOLUME",target=/config \
 	--network "$NETWORK" \
-	--ip "$IP" \
 	-d "$IMAGE" proxy "$@"
 
 # Loop over the config files in the proxy volume, and connect the proxy
