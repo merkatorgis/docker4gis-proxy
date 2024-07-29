@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/cookiejar"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
@@ -32,31 +31,17 @@ type config struct {
 }
 
 var (
-	configs          = make(map[string]*config)
-	proxyHost        = os.Getenv("PROXY_HOST")
-	proxyPort        = os.Getenv("PROXY_PORT")
-	useAutocert      = os.Getenv("AUTOCERT")
-	dockerEnv        = os.Getenv("DOCKER_ENV")
-	dockerUser       = os.Getenv("DOCKER_USER")
-	debug            = os.Getenv("DEBUG") == "true"
-	passThroughProxy *httputil.ReverseProxy
-	jar              *cookiejar.Jar
+	configs     = make(map[string]*config)
+	proxyHost   = os.Getenv("PROXY_HOST")
+	proxyPort   = os.Getenv("PROXY_PORT")
+	useAutocert = os.Getenv("AUTOCERT")
+	dockerEnv   = os.Getenv("DOCKER_ENV")
+	dockerUser  = os.Getenv("DOCKER_USER")
+	debug       = os.Getenv("DEBUG") == "true"
+	jar         *cookiejar.Jar
 )
 
 func init() {
-	passThroughProxy = &httputil.ReverseProxy{
-		ModifyResponse: modifyResponse,
-		Director: func(r *http.Request) {
-			target, _ := url.Parse(r.FormValue("url"))
-			query := r.URL.Query()
-			query.Del("url")
-			target.RawQuery = query.Encode()
-			r.URL = target
-			r.Host = target.Host
-			filterCookies(r)
-			log.Printf("%s %s Passthrough %v", r.RemoteAddr, r.Method, r.URL)
-		},
-	}
 	if newJar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List}); err != nil {
 		log.Fatal(err)
 	} else {
@@ -156,16 +141,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.RequestURI)
 	if r.Method == "OPTIONS" || r.Method == "HEAD" {
 		cors(w, r)
-	} else if r.URL.Path == "/" && r.URL.Query().Get("url") != "" {
-		if target, err := url.Parse(r.FormValue("url")); err != nil {
-			log.Printf("%+v", err)
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadGateway)
-		} else if !strings.Contains(target.Host, ".") {
-			log.Printf("Not passing through to internal host")
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		} else {
-			passThroughProxy.ServeHTTP(w, r)
-		}
 	} else {
 		reverse(w, r)
 	}
