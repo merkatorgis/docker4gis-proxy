@@ -7,7 +7,6 @@ PROXY_PORT_HTTP=${PROXY_PORT_HTTP:-80}
 AUTOCERT=${AUTOCERT:-false}
 DEBUG=${DEBUG:-false}
 
-SECRET=$SECRET
 API=$API
 AUTH_PATH=$AUTH_PATH
 APP=$APP
@@ -51,7 +50,6 @@ docker container run --restart "$RESTART" --name "$CONTAINER" \
 	-e AUTOCERT="$AUTOCERT" \
 	-e DOCKER_ENV="$DOCKER_ENV" \
 	-e DEBUG="$DEBUG" \
-	-e "$(docker4gis/noop.sh SECRET "$SECRET")" \
 	-e "$(docker4gis/noop.sh API "$API")" \
 	-e "$(docker4gis/noop.sh AUTH_PATH "$AUTH_PATH")" \
 	-e "$(docker4gis/noop.sh APP "$APP")" \

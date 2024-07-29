@@ -1,7 +1,6 @@
 #!/bin/sh
 
 DOCKER_USER=${DOCKER_USER}
-SECRET=${SECRET}
 HOMEDEST=${HOMEDEST}
 API=${API}
 APP=${APP}
@@ -18,7 +17,6 @@ OSM="http://${DOCKER_USER}-osm"
 echo DOCKER_USER="${DOCKER_USER}"
 
 echo "authPath=${AUTH_PATH}
-secret=${SECRET}
 homedest=${HOMEDEST}
 api=${API}
 app=${APP}
