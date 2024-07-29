@@ -12,10 +12,18 @@ import (
 	"strings"
 )
 
-func bodyString(body io.ReadCloser) (content string, err error) {
-	if body == nil || body == http.NoBody {
-		return "", nil
+func bodyStringFromRequest(r *http.Request) (content string, wasRead bool, err error) {
+	if r.Body == nil || r.Body == http.NoBody {
+		return "", false, nil
 	}
+	if strings.HasPrefix(r.Header.Get("content-type"), "multipart/form-data") {
+		return `"Bodies with content-type multipart/form-data (file uploads) are not forwarded to the authorisation endpoint."`, false, nil
+	}
+	content, err = bodyString(r.Body)
+	return content, true, err
+}
+
+func bodyString(body io.ReadCloser) (content string, err error) {
 	defer body.Close()
 	if bytes, err := ioutil.ReadAll(body); err != nil {
 		return "", err
@@ -33,7 +41,7 @@ type authPathBody struct {
 
 func authorise(r *http.Request, path string, authPath string) (statusCode int, err error) {
 	query := r.URL.Query()
-	if body, errBodyString := bodyString(r.Body); errBodyString != nil {
+	if body, bodyWasRead, errBodyString := bodyStringFromRequest(r); errBodyString != nil {
 		return http.StatusInternalServerError, errBodyString
 	} else if jsonBody, errMarshal := json.Marshal(authPathBody{r.Method, path, query, body}); errMarshal != nil {
 		return http.StatusInternalServerError, errMarshal
@@ -44,11 +52,10 @@ func authorise(r *http.Request, path string, authPath string) (statusCode int, e
 		req.Header.Del("accept-encoding")
 		req.Header.Set("content-type", "application/json")
 		req.Header.Set("accept", "application/json, application/*, text/*")
-		filterCookies(req)
 		if res, errDo := http.DefaultClient.Do(req); errDo != nil {
 			return http.StatusInternalServerError, errDo
-		} else if authorization, errAuthorization := bodyString(res.Body); errAuthorization != nil {
-			return http.StatusInternalServerError, errAuthorization
+		} else if authorization, errBody := bodyString(res.Body); errBody != nil {
+			return http.StatusInternalServerError, errBody
 		} else if res.StatusCode != 200 {
 			return res.StatusCode, fmt.Errorf(authorization)
 		} else {
@@ -60,7 +67,11 @@ func authorise(r *http.Request, path string, authPath string) (statusCode int, e
 				authorization = strings.ReplaceAll(authorization, "\\\\", "\\")
 				authorization = strings.ReplaceAll(authorization, "\\\"", "\"")
 			}
-			r.Header.Set("Authorization", authorization)
+			if len(authorization) > 0 {
+				r.Header.Set("Authorization", authorization)
+			} else {
+				r.Header.Del("Authorization")
+			}
 			// Also, substitute any authorization placeholders in the request,
 			// to cater for use cases where the Authorization header isn't
 			// usable. In the authPath endpoint, do check that the placeholder
@@ -76,11 +87,13 @@ func authorise(r *http.Request, path string, authPath string) (statusCode int, e
 				}
 			}
 			r.URL.RawQuery = query.Encode()
-			body = substitute(body)
-			// reconstruct an unread io.ReadCloser body
-			r.Body = ioutil.NopCloser(bytes.NewBufferString(body))
-			r.ContentLength = int64(len(body))
-			if debug {
+			if bodyWasRead {
+				body = substitute(body)
+				// Reconstruct an unread io.ReadCloser body.
+				r.Body = ioutil.NopCloser(bytes.NewBufferString(body))
+				r.ContentLength = int64(len(body))
+			}
+			if debug && false {
 				curl := fmt.Sprintf("curl '%s' \\\n", authPath)
 				curl += "  --request POST \\\n"
 				curl += fmt.Sprintf("  --data '%s' \\\n", string(jsonBody))
