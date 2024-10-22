@@ -7,19 +7,14 @@ PROXY_PORT_HTTP=${PROXY_PORT_HTTP:-80}
 AUTOCERT=${AUTOCERT:-false}
 DEBUG=${DEBUG:-false}
 
-API=$API
-AUTH_PATH=$AUTH_PATH
-APP=$APP
-HOMEDEST=$HOMEDEST
-
-IMAGE=$IMAGE
-CONTAINER=$CONTAINER
-DOCKER_ENV=$DOCKER_ENV
-RESTART=$RESTART
-NETWORK=$NETWORK
-FILEPORT=$FILEPORT
-VOLUME=$VOLUME
-DOCKER_BINDS_DIR=$DOCKER_BINDS_DIR
+[ -z "$API" ] ||
+	echo "API=$API" >>"$ENV_FILE"
+[ -z "$APP" ] ||
+	echo "APP=$APP" >>"$ENV_FILE"
+[ -z "$HOMEDEST" ] ||
+	echo "HOMEDEST=$HOMEDEST" >>"$ENV_FILE"
+[ -z "$AUTH_PATH" ] ||
+	echo "AUTH_PATH=$AUTH_PATH" >>"$ENV_FILE"
 
 mkdir -p "$DOCKER_BINDS_DIR"/certificates
 
@@ -45,23 +40,17 @@ PROXY_PORT=$(docker4gis/port.sh "$PROXY_PORT")
 PROXY_PORT_HTTP=$(docker4gis/port.sh "$PROXY_PORT_HTTP")
 
 docker container run --restart "$RESTART" --name "$CONTAINER" \
-	-e PROXY_HOST="$PROXY_HOST" \
-	-e PROXY_PORT="$PROXY_PORT" \
-	-e AUTOCERT="$AUTOCERT" \
-	-e DOCKER_ENV="$DOCKER_ENV" \
-	-e DEBUG="$DEBUG" \
-	-e "$(docker4gis/noop.sh API "$API")" \
-	-e "$(docker4gis/noop.sh AUTH_PATH "$AUTH_PATH")" \
-	-e "$(docker4gis/noop.sh APP "$APP")" \
-	-e "$(docker4gis/noop.sh HOMEDEST "$HOMEDEST")" \
+	--env-file "$ENV_FILE" \
+	--env PROXY_HOST="$PROXY_HOST" \
+	--env PROXY_PORT="$PROXY_PORT" \
+	--env AUTOCERT="$AUTOCERT" \
 	--mount type=bind,source="$DOCKER_BINDS_DIR"/certificates,target=/certificates \
-	-p "$PROXY_PORT":443 \
-	-p "$PROXY_PORT_HTTP":80 \
-	--add-host="$(hostname)":"$(getip "$(hostname)")" \
-	-e DOCKER_ENV="$DOCKER_ENV" \
 	--mount source="$VOLUME",target=/config \
 	--network "$NETWORK" \
-	-d "$IMAGE" proxy "$@"
+	--publish "$PROXY_PORT":443 \
+	--publish "$PROXY_PORT_HTTP":80 \
+	--add-host="$(hostname)":"$(getip "$(hostname)")" \
+	--detach "$IMAGE" proxy "$@"
 
 # Loop over the config files in the proxy volume, and connect the proxy
 # container to any docker network of that name, so that the one proxy container
