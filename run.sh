@@ -39,24 +39,24 @@ urlhost() {
 PROXY_PORT=$(docker4gis/port.sh "$PROXY_PORT")
 PROXY_PORT_HTTP=$(docker4gis/port.sh "$PROXY_PORT_HTTP")
 
-docker container run --restart "$RESTART" --name "$CONTAINER" \
+docker container run --restart "$RESTART" --name "$DOCKER_CONTAINER" \
 	--env-file "$ENV_FILE" \
 	--env PROXY_HOST="$PROXY_HOST" \
 	--env PROXY_PORT="$PROXY_PORT" \
 	--env AUTOCERT="$AUTOCERT" \
 	--mount type=bind,source="$DOCKER_BINDS_DIR"/certificates,target=/certificates \
-	--mount source="$VOLUME",target=/config \
-	--network "$NETWORK" \
+	--mount source="$DOCKER_VOLUME",target=/config \
+	--network "$DOCKER_NETWORK" \
 	--publish "$PROXY_PORT":443 \
 	--publish "$PROXY_PORT_HTTP":80 \
 	--add-host="$(hostname)":"$(getip "$(hostname)")" \
-	--detach "$IMAGE" proxy "$@"
+	--detach "$DOCKER_IMAGE" proxy "$@"
 
 # Loop over the config files in the proxy volume, and connect the proxy
 # container to any docker network of that name, so that the one proxy container
 # can reach different applications' components' containers.
-for network in $(docker container exec "$CONTAINER" ls /config); do
+for network in $(docker container exec "$DOCKER_CONTAINER" ls /config); do
 	if docker network inspect "$network" >/dev/null 2>&1; then
-		docker network connect "$network" "$CONTAINER"
+		docker network connect "$network" "$DOCKER_CONTAINER"
 	fi
 done

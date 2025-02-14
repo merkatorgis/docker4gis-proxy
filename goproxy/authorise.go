@@ -56,7 +56,7 @@ func authorise(r *http.Request, path string, authPath string) (statusCode int, e
 			return http.StatusInternalServerError, errDo
 		} else if authorization, errBody := bodyString(res.Body); errBody != nil {
 			return http.StatusInternalServerError, errBody
-		} else if res.StatusCode != 200 {
+		} else if res.StatusCode < 200 || res.StatusCode >= 300 {
 			return res.StatusCode, fmt.Errorf(authorization)
 		} else {
 			// authorisation succeeded; we'll pass through what they responded
