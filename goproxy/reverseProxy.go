@@ -57,6 +57,7 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 	director := func(r *http.Request) {
 
 		basicAuthAccessToken(r, key)
+		bbox(r, key)
 
 		if proxy.authorise {
 			// Have this request authorised at AUTH_PATH.
@@ -231,4 +232,74 @@ func basicAuthAccessToken(r *http.Request, key string) {
 			}
 		}
 	}
+}
+
+func bbox(r *http.Request, key string) {
+	if key != "/geoserver/" {
+		return
+	}
+	query := r.URL.Query()
+
+	bbox := query.Get("bbox")
+	if bbox == "" {
+		bbox = query.Get("BBOX")
+	}
+	if bbox == "" {
+		return
+	}
+
+	crs := query.Get("crs")
+	if crs == "" {
+		crs = query.Get("CRS")
+	}
+	srs := query.Get("srs")
+	if srs == "" {
+		srs = query.Get("SRS")
+	}
+	if crs == "" && srs == "" {
+		return
+	}
+	if srs == "" {
+		srs = crs
+	}
+	// Split srs on :, and assign the last part to it.
+	parts := strings.Split(srs, ":")
+	if len(parts) > 1 {
+		srs = parts[len(parts)-1]
+	}
+
+	envelope := bbox + "," + srs
+	// Replace "," with "\,".
+	envelope = strings.ReplaceAll(envelope, ",", "\\,")
+
+	viewparams_name := "viewparams"
+	viewparams := query.Get(viewparams_name)
+	if viewparams == "" {
+		viewparams_name = "VIEWPARAMS"
+		viewparams = query.Get(viewparams_name)
+	}
+
+	escapedComma := "||EscapedComma||"
+	// Replace "\," in viewparams with escapedComma.
+	viewparams = strings.ReplaceAll(viewparams, "\\,", escapedComma)
+
+	new_viewparams := ""
+
+	// Split viewparams on commas.
+	parts = strings.Split(viewparams, ",")
+	for _, layerParams := range parts {
+		if len(new_viewparams) > 0 {
+			new_viewparams += ","
+		}
+		// Replace escapedComma with "\,".
+		layerParams = strings.ReplaceAll(layerParams, escapedComma, "\\,")
+		if len(layerParams) > 0 {
+			layerParams += ";"
+		}
+		layerParams += "envelope:" + envelope
+		new_viewparams += layerParams
+	}
+
+	query.Set(viewparams_name, new_viewparams)
+	r.URL.RawQuery = query.Encode()
 }
