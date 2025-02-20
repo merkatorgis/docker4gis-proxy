@@ -15,6 +15,8 @@ DEBUG=${DEBUG:-false}
 	echo "HOMEDEST=$HOMEDEST" >>"$ENV_FILE"
 [ -z "$AUTH_PATH" ] ||
 	echo "AUTH_PATH=$AUTH_PATH" >>"$ENV_FILE"
+[ -z "$CACHE_PATH" ] ||
+	echo "CACHE_PATH=$CACHE_PATH" >>"$ENV_FILE"
 
 mkdir -p "$DOCKER_BINDS_DIR"/certificates
 

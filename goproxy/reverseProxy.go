@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -40,6 +41,34 @@ func logRequest(r *http.Request) {
 	log.Printf("%s", curl)
 }
 
+type CustomTransport struct {
+	BaseTransport http.RoundTripper
+}
+
+func (t *CustomTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Custom logic: Intercept and return a response directly
+	if req.Header.Get("X-Cache-Status") == "HIT" {
+
+		resp := &http.Response{
+			StatusCode: http.StatusNotModified,
+			Status:     http.StatusText(http.StatusNotModified),
+			Proto:      "HTTP/1.1",
+			ProtoMajor: 1,
+			ProtoMinor: 1,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader("")),
+			Request:    req, // Associate response with the request
+		}
+
+		resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
+
+		return resp, nil
+	}
+
+	// Otherwise, forward the request using the original transport
+	return t.BaseTransport.RoundTrip(req)
+}
+
 func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 	config *config, proxy *proxy) *httputil.ReverseProxy {
 
@@ -54,6 +83,8 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 		return path
 	}
 
+	var cachePathResult *cachePathResult
+
 	director := func(r *http.Request) {
 
 		basicAuthAccessToken(r, key)
@@ -61,10 +92,21 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 
 		if proxy.authorise {
 			// Have this request authorised at AUTH_PATH.
-			if statusCode, err := authorise(r, path, config.authPath); err != nil {
-				log.Printf("authorise -> %s", http.StatusText(statusCode))
-				http.Error(w, err.Error(), statusCode)
+			if err := authorise(w, r, path, config.authPath); err != nil {
 				return
+			}
+		}
+
+		if proxy.cache {
+			// Have this request checked for 304 Not Modified at CACHE_PATH.
+			if result, err := cache(w, r, path, config.cachePath); err != nil {
+				return
+			} else {
+				cachePathResult = result
+				if !cachePathResult.Stale {
+					r.Header.Set("X-Cache-Status", "HIT")
+					return
+				}
 			}
 		}
 
@@ -140,6 +182,12 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 
 		cors(resp.Header, r)
 
+		for key, values := range cachePathResult.Header {
+			for _, value := range values {
+				resp.Header.Add(key, value)
+			}
+		}
+
 		// Rewrite all cookies' Domain and Path to match the proxy client's
 		// perspective.
 		cookieSet := NewSet()
@@ -193,10 +241,12 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 		return nil
 	}
 
-	transport := http.DefaultTransport
+	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
 	if proxy.insecure {
-		transport = transportInsecure
+		baseTransport = transportInsecure
 	}
+
+	transport := &CustomTransport{BaseTransport: baseTransport}
 
 	return &httputil.ReverseProxy{
 		Director:       director,

@@ -20,12 +20,14 @@ type proxy struct {
 	impersonate bool
 	insecure    bool
 	authorise   bool
+	cache       bool
 }
 
 type config struct {
-	homedest string
-	authPath string
-	proxies  map[string]*proxy
+	homedest  string
+	authPath  string
+	cachePath string
+	proxies   map[string]*proxy
 }
 
 var (
@@ -74,6 +76,9 @@ func main() {
 				} else if key == "authPath" {
 					configs[app].authPath = value
 					log.Printf("%s.authPath=%s", app, value)
+				} else if key == "cachePath" {
+					configs[app].cachePath = value
+					log.Printf("%s.cachePath=%s", app, value)
 				} else {
 					defineProxy(app, key, value)
 				}
@@ -176,8 +181,8 @@ func secureHandler(w http.ResponseWriter, r *http.Request) {
 
 func defineProxy(app, key, value string) {
 	log.Printf("/%s/%s -> %s", app, key, value)
-	impersonate, insecure, authorise := false, false, false
-	for strings.HasPrefix(value, "impersonate,") || strings.HasPrefix(value, "insecure,") || strings.HasPrefix(value, "authorise,") {
+	impersonate, insecure, authorise, cache := false, false, false, false
+	for strings.HasPrefix(value, "impersonate,") || strings.HasPrefix(value, "insecure,") || strings.HasPrefix(value, "authorise,") || strings.HasPrefix(value, "cache,") {
 		split := strings.SplitN(value, ",", 2)
 		value = split[1]
 		switch split[0] {
@@ -187,6 +192,8 @@ func defineProxy(app, key, value string) {
 			insecure = true
 		case "authorise":
 			authorise = true
+		case "cache":
+			cache = true
 		}
 	}
 	target, _ := url.Parse(value)
@@ -199,6 +206,7 @@ func defineProxy(app, key, value string) {
 		impersonate: impersonate,
 		insecure:    insecure,
 		authorise:   authorise,
+		cache:       cache,
 	}
 }
 

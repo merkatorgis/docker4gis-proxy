@@ -5,6 +5,7 @@ HOMEDEST=${HOMEDEST}
 API=${API}
 APP=${APP}
 AUTH_PATH=${AUTH_PATH}
+CACHE_PATH=${CACHE_PATH}
 
 RESOURCES="http://${DOCKER_USER}-resources"
 GEOSERVER="http://${DOCKER_USER}-geoserver:8080/geoserver/"
@@ -19,6 +20,7 @@ echo DOCKER_USER="${DOCKER_USER}"
 conf_file=/config/$DOCKER_USER
 
 echo "authPath=${AUTH_PATH}
+cachePath=${CACHE_PATH}
 homedest=${HOMEDEST}
 api=${API}
 app=${APP}
