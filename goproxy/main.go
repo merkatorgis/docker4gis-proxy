@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -46,13 +45,13 @@ var (
 )
 
 func main() {
-	fileInfos, err := ioutil.ReadDir("/config")
+	fileInfos, err := os.ReadDir("/config")
 	if err != nil {
 		log.Fatal(err)
 	}
 	// loop over config files (one per app)
 	for _, fileInfo := range fileInfos {
-		if fileInfo.Mode().IsDir() {
+		if fileInfo.Type().IsDir() {
 			continue
 		}
 		app := fileInfo.Name()
@@ -89,26 +88,32 @@ func main() {
 		}
 	}
 
-	go http.ListenAndServe(":80", handlers.CompressHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if dockerEnv == "DEVELOPMENT" {
-			handler(w, r)
-		} else {
-			// Redirect http to https
-			log.Printf("%s %s http->https %s", r.RemoteAddr, r.Method, r.URL.String())
-			url := r.URL
-			host := strings.Split(r.Host, ":")[0]
-			url.Host = host + ":" + proxyPort
-			url.Scheme = "https"
-			http.Redirect(w, r, url.String(), http.StatusMovedPermanently)
-		}
-	})))
+	go http.ListenAndServe(":80", handlers.CompressHandler(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if dockerEnv == "DEVELOPMENT" {
+				handler(w, r)
+			} else {
+				// Redirect http to https
+				log.Printf("%s %s http->https %s",
+					r.RemoteAddr, r.Method, r.URL.String())
+				url := r.URL
+				host := strings.Split(r.Host, ":")[0]
+				url.Host = host + ":" + proxyPort
+				url.Scheme = "https"
+				http.Redirect(w, r, url.String(), http.StatusMovedPermanently)
+			}
+		})))
 
-	go http.ListenAndServe(":8080", handlers.CompressHandler(http.HandlerFunc(handler)))
+	go http.ListenAndServe(":8080",
+		handlers.CompressHandler(http.HandlerFunc(handler)))
 
-	if strings.HasPrefix(proxyHost, "localhost") || dockerEnv == "DEVELOPMENT" || useAutocert != "true" {
+	if strings.HasPrefix(proxyHost, "localhost") ||
+		dockerEnv == "DEVELOPMENT" ||
+		useAutocert != "true" {
 		crt := "/certificates/" + proxyHost + ".crt"
 		key := "/certificates/" + proxyHost + ".key"
-		log.Fatal(http.ListenAndServeTLS(":443", crt, key, handlers.CompressHandler(http.HandlerFunc(secureHandler))))
+		log.Fatal(http.ListenAndServeTLS(":443", crt, key,
+			handlers.CompressHandler(http.HandlerFunc(secureHandler))))
 	} else {
 		manager := &autocert.Manager{
 			Cache:      autocert.DirCache("/config/autocert"),
@@ -143,8 +148,10 @@ func main() {
 func cors(h http.Header, r *http.Request) {
 	h.Set("Vary", "Origin")
 	h.Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
-	h.Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS, HEAD")
-	h.Set("Access-Control-Allow-Headers", "SOAPAction, X-Requested-With, Origin, Content-Type, Authorization, Accept, access_token")
+	h.Set("Access-Control-Allow-Methods",
+		"GET, PUT, POST, DELETE, OPTIONS, HEAD")
+	h.Set("Access-Control-Allow-Headers",
+		"SOAPAction, X-Requested-With, Origin, Content-Type, Authorization, Accept, access_token")
 	h.Set("Access-Control-Allow-Credentials", "true")
 }
 
@@ -164,7 +171,8 @@ func secureHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)
 	}
 	if contentSecurityPolicyReportOnly != "" {
-		w.Header().Set("Content-Security-Policy-Report-Only", contentSecurityPolicyReportOnly)
+		w.Header().Set("Content-Security-Policy-Report-Only",
+			contentSecurityPolicyReportOnly)
 	}
 
 	hstsValue := "max-age=" + hstsMaxAge
@@ -182,7 +190,10 @@ func secureHandler(w http.ResponseWriter, r *http.Request) {
 func defineProxy(app, key, value string) {
 	log.Printf("/%s/%s -> %s", app, key, value)
 	impersonate, insecure, authorise, cache := false, false, false, false
-	for strings.HasPrefix(value, "impersonate,") || strings.HasPrefix(value, "insecure,") || strings.HasPrefix(value, "authorise,") || strings.HasPrefix(value, "cache,") {
+	for strings.HasPrefix(value, "impersonate,") ||
+		strings.HasPrefix(value, "insecure,") ||
+		strings.HasPrefix(value, "authorise,") ||
+		strings.HasPrefix(value, "cache,") {
 		split := strings.SplitN(value, ",", 2)
 		value = split[1]
 		switch split[0] {
@@ -247,7 +258,7 @@ func reverse(w http.ResponseWriter, r *http.Request) {
 					path = path + "/"
 				}
 				if strings.HasPrefix(path, key) {
-					reverseProxy(w, r, path, app, key, config, proxy).ServeHTTP(w, r)
+					reverseProxy(r, path, app, key, config, proxy).ServeHTTP(w, r)
 					return
 				}
 			}

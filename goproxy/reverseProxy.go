@@ -3,22 +3,17 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 	"strings"
 )
 
 var (
-	transportInsecure *http.Transport = http.DefaultTransport.(*http.Transport)
-	cookieMap                         = make(map[string]*Set)
+	cookieMap = make(map[string]*Set)
 )
-
-func init() {
-	transportInsecure.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-}
 
 func logRequest(r *http.Request) {
 	curl := fmt.Sprintf("curl '%s' \\\n", r.URL)
@@ -45,31 +40,41 @@ type CustomTransport struct {
 	BaseTransport http.RoundTripper
 }
 
+// Use a custom RoundTrip method to short-circuit certain requests: respond to
+// them directly, without forwarding them to the designated target.
 func (t *CustomTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Custom logic: Intercept and return a response directly
-	if req.Header.Get("X-Cache-Status") == "HIT" {
+
+	shortCircuitStatusCode := req.Header.Get("X-Short-Circuit-Status-Code")
+
+	if shortCircuitStatusCode != "" {
+		shortCircuitMessage := req.Header.Get("X-Short-Circuit-Message")
+
+		// Parse to integer.
+		statusCode, err := strconv.Atoi(shortCircuitStatusCode)
+		if err != nil {
+			statusCode = http.StatusInternalServerError
+			shortCircuitMessage = "Invalid X-Short-Circuit-Status-Code"
+		}
 
 		resp := &http.Response{
-			StatusCode: http.StatusNotModified,
-			Status:     http.StatusText(http.StatusNotModified),
-			Proto:      "HTTP/1.1",
-			ProtoMajor: 1,
-			ProtoMinor: 1,
+			StatusCode: statusCode,
+			Status:     http.StatusText(statusCode),
 			Header:     make(http.Header),
-			Body:       io.NopCloser(strings.NewReader("")),
-			Request:    req, // Associate response with the request
+			Body:       http.NoBody,
+			Request:    req,
 		}
 
 		resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
+		resp.Header.Set("X-Short-Circuit-Message", shortCircuitMessage)
 
 		return resp, nil
 	}
 
-	// Otherwise, forward the request using the original transport
+	// Otherwise, forward the request as normal, using the original transport.
 	return t.BaseTransport.RoundTrip(req)
 }
 
-func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
+func reverseProxy(r *http.Request, path, app, key string,
 	config *config, proxy *proxy) *httputil.ReverseProxy {
 
 	keyWithoutTrailingSlash := strings.TrimSuffix(key, "/")
@@ -83,7 +88,7 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 		return path
 	}
 
-	var cachePathResult *cachePathResult
+	var cachePathHeader http.Header
 
 	director := func(r *http.Request) {
 
@@ -92,21 +97,17 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 
 		if proxy.authorise {
 			// Have this request authorised at AUTH_PATH.
-			if err := authorise(w, r, path, config.authPath); err != nil {
+			if err := authorise(r, path, config.authPath); err != nil {
 				return
 			}
 		}
 
 		if proxy.cache {
-			// Have this request checked for 304 Not Modified at CACHE_PATH.
-			if result, err := cache(w, r, path, config.cachePath); err != nil {
+			// Check cache status for this request at CACHE_PATH.
+			header, err := cache(r, path, config.cachePath)
+			cachePathHeader = header
+			if err != nil {
 				return
-			} else {
-				cachePathResult = result
-				if !cachePathResult.Stale {
-					r.Header.Set("X-Cache-Status", "HIT")
-					return
-				}
 			}
 		}
 
@@ -182,7 +183,7 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 
 		cors(resp.Header, r)
 
-		for key, values := range cachePathResult.Header {
+		for key, values := range cachePathHeader {
 			for _, value := range values {
 				resp.Header.Add(key, value)
 			}
@@ -243,7 +244,7 @@ func reverseProxy(w http.ResponseWriter, r *http.Request, path, app, key string,
 
 	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
 	if proxy.insecure {
-		baseTransport = transportInsecure
+		baseTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	transport := &CustomTransport{BaseTransport: baseTransport}

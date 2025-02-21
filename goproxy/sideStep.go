@@ -37,26 +37,35 @@ func bodyString(body io.ReadCloser) (content string, err error) {
 	}
 }
 
-func writeError(w http.ResponseWriter, action string, statusCode int, err error) error {
-	log.Printf("%s -> %s", action, http.StatusText(statusCode))
-	http.Error(w, fmt.Sprintf("%s", err), statusCode)
+func shortCircuit(r *http.Request, action string, statusCode int, err error) error {
+	if statusCode == 0 {
+		statusCode = http.StatusInternalServerError
+	}
+
+	// Set header values that are picked up by the CustomTransport.RoundTrip.
+	r.Header.Set("X-Short-Circuit-Status-Code", fmt.Sprintf("%d", statusCode))
+
+	shortCircuitMessage := fmt.Sprintf("%s short circuit -> %d %s - %s",
+		action, statusCode, http.StatusText(statusCode), err)
+	r.Header.Set("X-Short-Circuit-Message", shortCircuitMessage)
+
+	log.Print(shortCircuitMessage)
 	return err
 }
 
-func sideStep(w http.ResponseWriter, r *http.Request, sideStepName string, sideStepPath string, bodyStruct any, callback func(string) (string, int, error)) (err error) {
-	wErr := func(statusCode int, err error) error {
-		if statusCode == 0 {
-			statusCode = http.StatusInternalServerError
-		}
-		return writeError(w, sideStepName, statusCode, err)
+func sideStep(r *http.Request, sideStepName string, sideStepPath string,
+	bodyStruct any, callback func(string) (string, int, error)) (err error) {
+	short := func(statusCode int, err error) error {
+		return shortCircuit(r, sideStepName, statusCode, err)
 	}
 	dLog("  %s %s %v", sideStepName, sideStepPath, bodyStruct)
 	if jsonBody, errMarshal := json.Marshal(bodyStruct); errMarshal != nil {
 		dLog("  ERROR: errMarshal")
-		return wErr(0, errMarshal)
-	} else if req, errNewRequest := http.NewRequest("POST", sideStepPath, bytes.NewReader(jsonBody)); errNewRequest != nil {
+		return short(0, errMarshal)
+	} else if req, errNewRequest := http.NewRequest("POST", sideStepPath,
+		bytes.NewReader(jsonBody)); errNewRequest != nil {
 		dLog("  ERROR: errNewRequest")
-		return wErr(0, errNewRequest)
+		return short(0, errNewRequest)
 	} else {
 		req.Header = r.Header.Clone()
 		req.Header.Del("accept-encoding")
@@ -64,16 +73,17 @@ func sideStep(w http.ResponseWriter, r *http.Request, sideStepName string, sideS
 		req.Header.Set("accept", "application/json, application/*, text/*")
 		if res, errDo := http.DefaultClient.Do(req); errDo != nil {
 			dLog("  ERROR: errDo, req: %v", req)
-			return wErr(0, errDo)
+			return short(0, errDo)
 		} else if content, errBody := bodyString(res.Body); errBody != nil {
 			dLog("  ERROR: errBody")
-			return wErr(0, errBody)
+			return short(0, errBody)
 		} else if res.StatusCode < 200 || res.StatusCode >= 300 {
 			dLog("  ERROR: StatusCode")
-			return wErr(res.StatusCode, fmt.Errorf("%s", content))
-		} else if transformedContent, transformStatusCode, errTransform := callback(content); errTransform != nil {
+			return short(res.StatusCode, fmt.Errorf("%s", content))
+		} else if transformedContent, transformStatusCode, errTransform :=
+			callback(content); errTransform != nil {
 			dLog("  ERROR: errTransform")
-			return wErr(transformStatusCode, errTransform)
+			return short(transformStatusCode, errTransform)
 		} else {
 			if debug && false {
 				curl := fmt.Sprintf("curl '%s' \\\n", sideStepPath)
@@ -91,7 +101,8 @@ func sideStep(w http.ResponseWriter, r *http.Request, sideStepName string, sideS
 				}
 				curl += "  --insecure \\\n"
 				curl += "  --include"
-				log.Printf("%s -> content: %s\n%s", sideStepName, transformedContent, curl)
+				log.Printf("%s -> content: %s\n%s", sideStepName,
+					transformedContent, curl)
 			}
 			return nil
 		}
@@ -105,16 +116,17 @@ type authPathBody struct {
 	Body   string
 }
 
-func authorise(w http.ResponseWriter, r *http.Request, path string, authPath string) (err error) {
+func authorise(r *http.Request, path string, authPath string) (err error) {
 	sideStepName := "authorise"
 	query := r.URL.Query()
 	if body, bodyWasRead, errBodyString := bodyStringFromRequest(r); errBodyString != nil {
-		return writeError(w, sideStepName, http.StatusInternalServerError, errBodyString)
+		return shortCircuit(r, sideStepName, 0, errBodyString)
 	} else {
 		callback := func(authorization string) (string, int, error) {
 			// authorisation succeeded; we'll pass through what they responded
 			// with
-			if strings.HasPrefix(authorization, `"`) && strings.HasSuffix(authorization, `"`) {
+			if strings.HasPrefix(authorization, `"`) &&
+				strings.HasSuffix(authorization, `"`) {
 				// it was a JSON encoded string; unescape `\` and `"`
 				authorization = strings.Trim(authorization, `"`)
 				authorization = strings.ReplaceAll(authorization, "\\\\", "\\")
@@ -149,7 +161,7 @@ func authorise(w http.ResponseWriter, r *http.Request, path string, authPath str
 			return authorization, 0, nil
 		}
 		bodyStruct := authPathBody{r.Method, path, query, body}
-		return sideStep(w, r, sideStepName, authPath, bodyStruct, callback)
+		return sideStep(r, sideStepName, authPath, bodyStruct, callback)
 	}
 }
 
@@ -164,9 +176,9 @@ type cachePathResult struct {
 	Header http.Header
 }
 
-func cache(w http.ResponseWriter, r *http.Request, path string, cachePath string) (result *cachePathResult, err error) {
+func cache(r *http.Request, path string, cachePath string) (header http.Header, err error) {
 	sideStepName := "cache"
-	result = &cachePathResult{}
+	result := &cachePathResult{}
 	callback := func(content string) (string, int, error) {
 		// Parse the JSON-encoded result.
 		if errUnmarshal := json.Unmarshal([]byte(content), result); errUnmarshal != nil {
@@ -178,11 +190,14 @@ func cache(w http.ResponseWriter, r *http.Request, path string, cachePath string
 		} else if result.Header.Get("Last-Modified") == "" {
 			dLog("  ERROR: Last-Modified")
 			return "", 0, fmt.Errorf("cachePath response had no Last-Modified header")
+		} else if !result.Stale {
+			dLog("  NO ERROR: !result.Stale")
+			return "", http.StatusNotModified, fmt.Errorf("cache hit")
 		} else {
 			return "", 0, nil
 		}
 	}
 	bodyStruct := cachePathBody{path, r.URL.Query(), r.Header}
-	err = sideStep(w, r, sideStepName, cachePath, bodyStruct, callback)
-	return result, err
+	err = sideStep(r, sideStepName, cachePath, bodyStruct, callback)
+	return result.Header, err
 }
