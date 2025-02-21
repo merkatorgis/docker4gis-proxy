@@ -58,7 +58,7 @@ func sideStep(r *http.Request, sideStepName string, sideStepPath string,
 	short := func(statusCode int, err error) error {
 		return shortCircuit(r, sideStepName, statusCode, err)
 	}
-	dLog("  %s %s %v", sideStepName, sideStepPath, bodyStruct)
+	dLog("sideStep  %s %s %v", sideStepName, sideStepPath, bodyStruct)
 	if jsonBody, errMarshal := json.Marshal(bodyStruct); errMarshal != nil {
 		dLog("  ERROR: errMarshal")
 		return short(0, errMarshal)
@@ -180,12 +180,13 @@ func cache(r *http.Request, path string, cachePath string) (header http.Header, 
 	sideStepName := "cache"
 	result := &cachePathResult{}
 	callback := func(content string) (string, int, error) {
+		dLog("  cache callback - %s", content)
 		// Parse the JSON-encoded result.
 		if errUnmarshal := json.Unmarshal([]byte(content), result); errUnmarshal != nil {
 			dLog("  ERROR: errUnmarshal - content: %s", content)
 			return "", 0, errUnmarshal
 		} else if result.Header == nil {
-			dLog("  ERROR: Header")
+			dLog("  ERROR: Header - %v", result)
 			return "", 0, fmt.Errorf("cachePath response had no header")
 		} else if result.Header.Get("Last-Modified") == "" {
 			dLog("  ERROR: Last-Modified")
