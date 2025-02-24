@@ -67,6 +67,8 @@ func (t *CustomTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		resp.Header.Set("Content-Type", "text/plain; charset=utf-8")
 		resp.Header.Set("X-Short-Circuit-Message", shortCircuitMessage)
 
+		log.Printf("%s - %s", shortCircuitMessage, req.URL)
+
 		return resp, nil
 	}
 
@@ -175,7 +177,7 @@ func reverseProxy(r *http.Request, path, app, key string,
 		for _, cookie := range r.Cookies() {
 			cookieNames = append(cookieNames, cookie.Name)
 		}
-		log.Printf("%s %s Reverse %v %v %s",
+		log.Printf("%s %s Reverse %v %s %s",
 			r.RemoteAddr, r.Method, r.Host, r.URL, cookieNames)
 	}
 
