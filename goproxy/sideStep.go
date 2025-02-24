@@ -49,7 +49,6 @@ func shortCircuit(r *http.Request, action string, statusCode int, err error) err
 		action, statusCode, http.StatusText(statusCode), err)
 	r.Header.Set("X-Short-Circuit-Message", shortCircuitMessage)
 
-	log.Print(shortCircuitMessage)
 	return err
 }
 
