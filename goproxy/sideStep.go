@@ -185,15 +185,17 @@ func cache(r *http.Request, path string, cachePath string) (header http.Header, 
 		if errUnmarshal := json.Unmarshal([]byte(content), result); errUnmarshal != nil {
 			dLog("  ERROR: errUnmarshal - content: %s", content)
 			return "", 0, errUnmarshal
-		} else if result.Header == nil {
-			dLog("  ERROR: Header - %v", result)
-			return "", 0, fmt.Errorf("cachePath response had no header")
-		} else if result.Header.Get("Last-Modified") == "" {
-			dLog("  ERROR: Last-Modified")
-			return "", 0, fmt.Errorf("cachePath response had no Last-Modified header")
 		} else if !result.Stale {
-			dLog("  NO ERROR: !result.Stale")
-			return "", http.StatusNotModified, fmt.Errorf("cache hit")
+			if result.Header == nil {
+				dLog("  ERROR: Header - %v", result)
+				return "", 0, fmt.Errorf("cachePath response had no header")
+			} else if result.Header.Get("Last-Modified") == "" {
+				dLog("  ERROR: Last-Modified")
+				return "", 0, fmt.Errorf("cachePath response had no Last-Modified header")
+			} else {
+				dLog("  NO ERROR: !result.Stale")
+				return "", http.StatusNotModified, fmt.Errorf("cache hit")
+			}
 		} else {
 			return "", 0, nil
 		}
