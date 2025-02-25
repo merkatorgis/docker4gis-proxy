@@ -94,8 +94,10 @@ func reverseProxy(r *http.Request, path, app, key string,
 
 	director := func(r *http.Request) {
 
-		basicAuthAccessToken(r, key)
-		bbox(r, key)
+		if key == "/geoserver/" {
+			accessToken(r)
+			envelope(r)
+		}
 
 		if proxy.authorise {
 			// Have this request authorised at AUTH_PATH.
@@ -258,101 +260,149 @@ func reverseProxy(r *http.Request, path, app, key string,
 	}
 }
 
-func basicAuthAccessToken(r *http.Request, key string) {
+func accessToken(r *http.Request) {
+	access_token := getEnv(r, "access_token")
+	if access_token != "" {
+		// Deprecated:
+		addViewparam(r, "access_token", access_token)
+		return
+	}
+	access_token = getViewparam(r, "access_token")
+	if access_token != "" {
+		addEnv(r, "access_token", access_token)
+		return
+	}
 	if username, password, ok := r.BasicAuth(); ok && username == "access_token" {
 		r.Header.Del("Authorization")
-		if key == "/geoserver/" {
-			// for geoserver, read any "access_token" from basic auth, and pass
-			// it on as a viewparam
-			query := r.URL.Query()
-			viewparams := query.Get("viewparams")
-			if viewparams == "" {
-				viewparams = query.Get("VIEWPARAMS")
-			}
-			if strings.Contains(viewparams, username) {
-				log.Printf(
-					"access_token provided in viewparams as well as in basic auth; using the viewparams value")
-			} else {
-				param := username + ":" + password
-				if viewparams == "" {
-					viewparams = param
-				} else {
-					viewparams = viewparams + ";" + param
-				}
-				query.Set("VIEWPARAMS", viewparams)
-				r.URL.RawQuery = query.Encode()
-				log.Printf("Basic Auth access_token passed in VIEWPARAMS")
-			}
-		}
+		addEnv(r, username, password)
+		// Deprecated:
+		addViewparam(r, username, password)
 	}
 }
 
-func bbox(r *http.Request, key string) {
-	if key != "/geoserver/" {
-		return
-	}
-	query := r.URL.Query()
-
-	bbox := query.Get("bbox")
-	if bbox == "" {
-		bbox = query.Get("BBOX")
-	}
+func envelope(r *http.Request) {
+	_, bbox := getQuery(r, "bbox")
 	if bbox == "" {
 		return
 	}
 
-	crs := query.Get("crs")
-	if crs == "" {
-		crs = query.Get("CRS")
-	}
-	srs := query.Get("srs")
-	if srs == "" {
-		srs = query.Get("SRS")
-	}
+	_, crs := getQuery(r, "crs")
+	_, srs := getQuery(r, "srs")
 	if crs == "" && srs == "" {
 		return
 	}
 	if srs == "" {
 		srs = crs
 	}
+
 	// Split srs on :, and assign the last part to it.
 	parts := strings.Split(srs, ":")
 	if len(parts) > 1 {
 		srs = parts[len(parts)-1]
 	}
 
-	envelope := bbox + "," + srs
-	// Replace "," with "\,".
-	envelope = strings.ReplaceAll(envelope, ",", "\\,")
+	addEnv(r, "envelope", bbox+","+srs)
+}
 
-	viewparams_name := "viewparams"
-	viewparams := query.Get(viewparams_name)
-	if viewparams == "" {
-		viewparams_name = "VIEWPARAMS"
-		viewparams = query.Get(viewparams_name)
-	}
+func getEnv(r *http.Request, key string) (value string) {
+	_, env := getQuery(r, "env")
+	return getKV(env, key)
+}
 
+func addEnv(r *http.Request, key string, value string) {
+	env_key, env_value := getQuery(r, "env")
+	env_value = addKV(env_value, key, value)
+	setQuery(r, env_key, env_value)
+}
+
+func getViewparam(r *http.Request, key string) (value string) {
+	_, viewparams := getQuery(r, "viewparams")
 	escapedComma := "||EscapedComma||"
-	// Replace "\," in viewparams with escapedComma.
+	// Replace "\," with escapedComma in viewparams.
 	viewparams = strings.ReplaceAll(viewparams, "\\,", escapedComma)
-
-	new_viewparams := ""
-
-	// Split viewparams on commas.
-	parts = strings.Split(viewparams, ",")
+	// Split viewparams on ",", and assign the resulting slice to parts.
+	parts := strings.Split(viewparams, ",")
 	for _, layerParams := range parts {
-		if len(new_viewparams) > 0 {
+		// Replace escapedComma with "," in layerParams.
+		layerParams = strings.ReplaceAll(layerParams, escapedComma, ",")
+		value = getKV(layerParams, key)
+		if value != "" {
+			break
+		}
+	}
+	return value
+}
+
+func addViewparam(r *http.Request, key string, value string) {
+	viewparams_key, viewparams := getQuery(r, "viewparams")
+	new_viewparams := ""
+	escapedComma := "||EscapedComma||"
+	// Replace "\," with escapedComma in viewparams.
+	viewparams = strings.ReplaceAll(viewparams, "\\,", escapedComma)
+	// Split viewparams on ",", and assign the resulting slice to parts.
+	parts := strings.Split(viewparams, ",")
+	for i, layerParams := range parts {
+		// Replace escapedComma with "," in layerParams.
+		layerParams = strings.ReplaceAll(layerParams, escapedComma, ",")
+		layerParams = addKV(layerParams, key, value)
+		if i > 0 {
 			new_viewparams += ","
 		}
-		// Replace escapedComma with "\,".
-		layerParams = strings.ReplaceAll(layerParams, escapedComma, "\\,")
-		if len(layerParams) > 0 {
-			layerParams += ";"
-		}
-		layerParams += "envelope:" + envelope
 		new_viewparams += layerParams
 	}
+	setQuery(r, viewparams_key, new_viewparams)
+}
 
-	query.Set(viewparams_name, new_viewparams)
+func getKV(source string, key string) (value string) {
+	escapedSemicolon := "||EscapedSemicolon||"
+	// Replace "\;" with escapedSemicolon in source.
+	source = strings.ReplaceAll(source, "\\;", escapedSemicolon)
+	// Split source on ";", and assign the resulting slice to parts.
+	parts := strings.Split(source, ";")
+	for _, part := range parts {
+		// Replace escapedSemicolon with ";" in part.
+		part = strings.ReplaceAll(part, escapedSemicolon, ";")
+		escapedColon := "||EscapedColon||"
+		// Replace "\:" with escapedColon in part.
+		part = strings.ReplaceAll(part, "\\:", escapedColon)
+		// Split part on ":", and assign the resulting slice to kv.
+		kv := strings.Split(part, ":")
+		if len(kv) == 2 {
+			if strings.ReplaceAll(kv[0], escapedColon, ":") == key {
+				value = strings.ReplaceAll(kv[1], escapedColon, ":")
+				break
+			}
+		}
+	}
+	return value
+}
+
+func addKV(source string, key string, value string) (result string) {
+	key = strings.ReplaceAll(key, ":", "\\:")
+	key = strings.ReplaceAll(key, ";", "\\;")
+	value = strings.ReplaceAll(value, ":", "\\:")
+	value = strings.ReplaceAll(value, ";", "\\;")
+	result = source
+	if len(result) > 0 {
+		result += ";"
+	}
+	return result + key + ":" + value
+}
+
+func getQuery(r *http.Request, uncasedKey string) (key string, value string) {
+	query := r.URL.Query()
+
+	key = strings.ToLower(uncasedKey)
+	value = query.Get(key)
+	if value == "" {
+		key = strings.ToUpper(key)
+		value = query.Get(key)
+	}
+	return key, value
+}
+
+func setQuery(r *http.Request, key string, value string) {
+	query := r.URL.Query()
+	query.Set(key, value)
 	r.URL.RawQuery = query.Encode()
 }
