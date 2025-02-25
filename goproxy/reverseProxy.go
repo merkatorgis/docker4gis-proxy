@@ -94,10 +94,7 @@ func reverseProxy(r *http.Request, path, app, key string,
 
 	director := func(r *http.Request) {
 
-		if key == "/geoserver/" {
-			accessToken(r)
-			envelope(r)
-		}
+		decorate(r, key)
 
 		if proxy.authorise {
 			// Have this request authorised at AUTH_PATH.
@@ -257,6 +254,13 @@ func reverseProxy(r *http.Request, path, app, key string,
 		Director:       director,
 		ModifyResponse: modifyResponse,
 		Transport:      transport,
+	}
+}
+
+func decorate(r *http.Request, key string) {
+	if key == "/geoserver/" {
+		accessToken(r)
+		envelope(r)
 	}
 }
 
