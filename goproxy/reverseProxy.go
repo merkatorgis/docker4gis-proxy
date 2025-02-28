@@ -186,8 +186,18 @@ func reverseProxy(r *http.Request, path, app, key string,
 
 		for key, values := range cachePathHeader {
 			for _, value := range values {
-				resp.Header.Add(key, value)
+				resp.Header.Set(key, value)
 			}
+		}
+
+		if key == "/geoserver/" &&
+			strings.HasPrefix(resp.Header.Get("Content-Type"), "text/xml") &&
+			resp.StatusCode == http.StatusOK {
+			// The content type suggests the response contains an error message,
+			// but the status code doesn't reflect that. We'll correct this to
+			// prevent the client from caching the response.
+			resp.StatusCode = http.StatusInternalServerError
+			resp.Status = http.StatusText(resp.StatusCode)
 		}
 
 		// Rewrite all cookies' Domain and Path to match the proxy client's
