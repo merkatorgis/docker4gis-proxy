@@ -91,6 +91,7 @@ func main() {
 	go http.ListenAndServe(":80", handlers.CompressHandler(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if dockerEnv == "DEVELOPMENT" {
+				r.URL.Scheme = "http"
 				handler(w, r)
 			} else {
 				// Redirect http to https
