@@ -121,7 +121,10 @@ func reverseProxy(r *http.Request, path, app, key string,
 		forwardedHost := r.Host
 		r.Header.Set("X-Forwarded-Host", forwardedHost)
 
-		forwardedProto := "https" // r.URL.Scheme == ""
+		forwardedProto := "https"
+		if r.URL.Scheme != "" {
+			forwardedProto = r.URL.Scheme
+		}
 		r.Header.Set("X-Forwarded-Proto", forwardedProto)
 
 		forwardedPath := appPath(keyWithoutTrailingSlash)
