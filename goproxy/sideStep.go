@@ -131,6 +131,13 @@ func authorise(r *http.Request, path string, authPath string) (err error) {
 				authorization = strings.ReplaceAll(authorization, "\\\\", "\\")
 				authorization = strings.ReplaceAll(authorization, "\\\"", "\"")
 			}
+			// Clean the authorization value to ensure it's valid for HTTP headers
+			authorization = strings.TrimSpace(authorization)
+			authorization = strings.ReplaceAll(authorization, "\n", "")
+			authorization = strings.ReplaceAll(authorization, "\r", "")
+			if debug {
+				log.Printf("Authorization value (length=%d): %q", len(authorization), authorization)
+			}
 			if len(authorization) > 0 {
 				r.Header.Set("Authorization", authorization)
 			} else {
