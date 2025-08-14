@@ -44,6 +44,12 @@ var (
 	contentSecurityPolicyReportOnly = os.Getenv("CONTENT_SECURITY_POLICY_REPORT_ONLY")
 )
 
+func dLog(format string, args ...interface{}) {
+	if debug {
+		log.Printf(format, args...)
+	}
+}
+
 func main() {
 	fileInfos, err := os.ReadDir("/config")
 	if err != nil {
