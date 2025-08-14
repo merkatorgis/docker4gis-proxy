@@ -94,7 +94,8 @@ func reverseProxy(r *http.Request, path, app, key string,
 
 	director := func(r *http.Request) {
 
-		decorate(r, key)
+		path = decorate(r, key, path)
+		dLog("r.URL.path=%s --- path=%s", r.URL.Path, path)
 
 		if proxy.authorise {
 			// Have this request authorised at AUTH_PATH.
@@ -268,31 +269,67 @@ func reverseProxy(r *http.Request, path, app, key string,
 	}
 }
 
-func decorate(r *http.Request, key string) {
+func decorate(r *http.Request, key string, path string) string {
 	if key == "/geoserver/" {
-		accessToken(r)
+		path = accessToken(r, path)
 		envelope(r)
 	}
+	return path
 }
 
-func accessToken(r *http.Request) {
-	access_token := getEnv(r, "access_token")
-	if access_token != "" {
+func accessToken(r *http.Request, path string) string {
+	key := "access_token"
+
+	token := getEnv(r, key)
+	if token != "" {
 		// Deprecated:
-		addViewparam(r, "access_token", access_token)
-		return
+		addViewparam(r, key, token)
+		return path
 	}
-	access_token = getViewparam(r, "access_token")
-	if access_token != "" {
-		addEnv(r, "access_token", access_token)
-		return
+
+	token = getViewparam(r, key)
+	if token != "" {
+		addEnv(r, key, token)
+		return path
 	}
-	if username, password, ok := r.BasicAuth(); ok && username == "access_token" {
+
+	token = r.Header.Get(key)
+	if token != "" {
+		r.Header.Del(key)
+	}
+
+	if username, password, ok := r.BasicAuth(); ok && username == key {
 		r.Header.Del("Authorization")
-		addEnv(r, username, password)
-		// Deprecated:
-		addViewparam(r, username, password)
+		token = password
 	}
+
+	fromPath := func(path string) string {
+		pathKey := "/" + key + "/"
+		if strings.Contains(path, pathKey) {
+			if idx := strings.Index(path, pathKey); idx != -1 {
+				remaining := path[idx+len(pathKey):]
+				if slashIdx := strings.Index(remaining, "/"); slashIdx != -1 {
+					token = remaining[:slashIdx]
+					path = path[:idx] + remaining[slashIdx:]
+				} else {
+					token = remaining
+					path = path[:idx]
+				}
+			}
+			dLog("%s extracted from path %s %s", pathKey, token, path)
+		}
+		return path
+	}
+	r.URL.Path = fromPath(r.URL.Path)
+	path = fromPath(path)
+
+	if token != "" {
+		addEnv(r, key, token)
+		// Deprecated:
+		addViewparam(r, key, token)
+	}
+
+	return path
 }
 
 func envelope(r *http.Request) {

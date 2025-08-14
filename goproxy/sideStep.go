@@ -11,12 +11,6 @@ import (
 	"strings"
 )
 
-func dLog(format string, args ...interface{}) {
-	if debug {
-		log.Printf(format, args...)
-	}
-}
-
 func bodyStringFromRequest(r *http.Request) (content string, wasRead bool, err error) {
 	if r.Body == nil || r.Body == http.NoBody {
 		return "", false, nil
