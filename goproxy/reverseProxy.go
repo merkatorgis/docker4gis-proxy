@@ -94,8 +94,9 @@ func reverseProxy(r *http.Request, path, app, key string,
 
 	director := func(r *http.Request) {
 
-		path = decorate(r, key, path)
-		dLog("r.URL.path=%s --- path=%s", r.URL.Path, path)
+		forwardedPath := appPath(keyWithoutTrailingSlash)
+		path, forwardedPath = decorate(r, key, path, forwardedPath)
+		dLog("r.URL.path=%s --- path=%s, forwardedPath=%s", r.URL.Path, path, forwardedPath)
 
 		if proxy.authorise {
 			// Have this request authorised at AUTH_PATH.
@@ -128,7 +129,6 @@ func reverseProxy(r *http.Request, path, app, key string,
 		}
 		r.Header.Set("X-Forwarded-Proto", forwardedProto)
 
-		forwardedPath := appPath(keyWithoutTrailingSlash)
 		r.Header.Set("X-Forwarded-Path", forwardedPath)
 		r.Header.Set("X-Forwarded-Prefix", forwardedPath)
 		r.Header.Set("X-Script-Name", forwardedPath)
@@ -269,28 +269,28 @@ func reverseProxy(r *http.Request, path, app, key string,
 	}
 }
 
-func decorate(r *http.Request, key string, path string) string {
+func decorate(r *http.Request, key string, path string, forwardedPath string) (string, string) {
 	if key == "/geoserver/" {
-		path = accessToken(r, path)
+		path, forwardedPath = accessToken(r, path, forwardedPath)
 		envelope(r)
 	}
-	return path
+	return path, forwardedPath
 }
 
-func accessToken(r *http.Request, path string) string {
+func accessToken(r *http.Request, path string, forwardedPath string) (string, string) {
 	key := "access_token"
 
 	token := getEnv(r, key)
 	if token != "" {
 		// Deprecated:
 		addViewparam(r, key, token)
-		return path
+		return path, forwardedPath
 	}
 
 	token = getViewparam(r, key)
 	if token != "" {
 		addEnv(r, key, token)
-		return path
+		return path, forwardedPath
 	}
 
 	token = r.Header.Get(key)
@@ -303,6 +303,7 @@ func accessToken(r *http.Request, path string) string {
 		token = password
 	}
 
+	extractedFromPath := false
 	fromPath := func(path string) string {
 		pathKey := "/" + key + "/"
 		if strings.Contains(path, pathKey) {
@@ -316,7 +317,11 @@ func accessToken(r *http.Request, path string) string {
 					path = path[:idx]
 				}
 			}
-			dLog("%s extracted from path %s %s", pathKey, token, path)
+			if !extractedFromPath {
+				forwardedPath = forwardedPath + pathKey + token
+				extractedFromPath = true
+				dLog("%s extracted from path %s", pathKey, path)
+			}
 		}
 		return path
 	}
@@ -329,7 +334,7 @@ func accessToken(r *http.Request, path string) string {
 		addViewparam(r, key, token)
 	}
 
-	return path
+	return path, forwardedPath
 }
 
 func envelope(r *http.Request) {
