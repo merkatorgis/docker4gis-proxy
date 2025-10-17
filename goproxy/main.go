@@ -157,9 +157,9 @@ func cors(h http.Header, r *http.Request) {
 	h.Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))
 	h.Set("Access-Control-Allow-Methods",
 		"GET, PUT, POST, DELETE, OPTIONS, HEAD")
-	h.Set("Access-Control-Allow-Headers",
-		"SOAPAction, X-Requested-With, Origin, Content-Type, Authorization, Accept, access_token")
 	h.Set("Access-Control-Allow-Credentials", "true")
+	h.Set("Access-Control-Allow-Headers", "SOAPAction, X-Requested-With, Origin, Content-Type, Authorization, Accept, access_token")
+	h.Set("Access-Control-Expose-Headers", "Content-Type, Content-Disposition")
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
