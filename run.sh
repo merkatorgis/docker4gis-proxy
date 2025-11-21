@@ -5,7 +5,6 @@ PROXY_HOST=${PROXY_HOST:-localhost}
 PROXY_PORT=${PROXY_PORT:-443}
 PROXY_PORT_HTTP=${PROXY_PORT_HTTP:-80}
 AUTOCERT=${AUTOCERT:-false}
-DEBUG=${DEBUG:-false}
 
 [ -z "$API" ] ||
 	echo "API=$API" >>"$ENV_FILE"
@@ -20,38 +19,20 @@ DEBUG=${DEBUG:-false}
 
 mkdir -p "$DOCKER_BINDS_DIR"/certificates
 
-getip() {
-	if result=$(getent ahostsv4 "$1" 2>/dev/null); then
-		echo "$result" | awk '{ print $1 ; exit }'
-	elif result=$(ping -4 -n 1 "$1" 2>/dev/null); then
-		echo "$result" | grep "$1" | sed 's~.*\[\(.*\)\].*~\1~'
-		# Pinging wouter [10.0.75.1] with 32 bytes of data:
-	elif result=$(ping -c 1 "${1}" 2>/dev/null); then
-		echo "$result" | grep PING | grep -o -E '\d+\.\d+\.\d+\.\d+'
-		# PING macbook-pro-van-wouter.local (188.166.80.233): 56 data bytes
-	else
-		echo '127.0.0.1'
-	fi
-}
-
-urlhost() {
-	echo "$1" | sed 's~.*//\([^:/]*\).*~\1~'
-}
-
 PROXY_PORT=$(docker4gis/port.sh "$PROXY_PORT")
 PROXY_PORT_HTTP=$(docker4gis/port.sh "$PROXY_PORT_HTTP")
 
 docker container run --restart "$RESTART" --name "$DOCKER_CONTAINER" \
 	--env-file "$ENV_FILE" \
+	--network "$DOCKER_NETWORK" \
+	--add-host host.docker.internal=host-gateway \
+	--mount source="$DOCKER_VOLUME",target=/config \
 	--env PROXY_HOST="$PROXY_HOST" \
 	--env PROXY_PORT="$PROXY_PORT" \
 	--env AUTOCERT="$AUTOCERT" \
 	--mount type=bind,source="$DOCKER_BINDS_DIR"/certificates,target=/certificates \
-	--mount source="$DOCKER_VOLUME",target=/config \
-	--network "$DOCKER_NETWORK" \
 	--publish "$PROXY_PORT":443 \
 	--publish "$PROXY_PORT_HTTP":80 \
-	--add-host="$(hostname)":"$(getip "$(hostname)")" \
 	--detach "$DOCKER_IMAGE" proxy "$@"
 
 # Loop over the config files in the proxy volume, and connect the proxy
